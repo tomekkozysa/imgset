@@ -1,0 +1,17 @@
+{
+  "name": "imgset",
+  "version": "1.0.0",
+  "type": "module",
+  "bin": {
+    "imgset": "./index.mjs"
+  },
+  "scripts": {
+    "initcfg": "node index.mjs init -c resizer.config.json",
+    "build": "node index.mjs build -c resizer.config.json",
+    "html": "node index.mjs html -c resizer.config.json",
+    "all": "node index.mjs all -c resizer.config.json"
+  },
+  "dependencies": {
+    "sharp": "^0.33.5"
+  }
+}

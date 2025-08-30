@@ -1,0 +1,48 @@
+{
+  "inputDir": "./input",
+  "outputDir": "./output",
+  "extensions": [
+    "jpg",
+    "jpeg",
+    "png",
+    "webp",
+    "avif"
+  ],
+  "formats": [
+    {
+      "format": "avif",
+      "quality": 32,
+      "effort": 4
+    },
+    {
+      "format": "webp",
+      "quality": 80
+    },
+    {
+      "format": "jpeg",
+      "quality": 75,
+      "progressive": true,
+      "mozjpeg": true
+    }
+  ],
+  "sizes": [
+    320,
+    640,
+    960,
+    1280,
+    1920,
+    2560,
+    3840
+  ],
+  "preserveFolders": true,
+  "perImageSubfolder": false,
+  "concurrency": 8,
+  "html": {
+    "file": "index.html",
+    "pageTitle": "Resized Images",
+    "sizesAttribute": "100vw",
+    "wrapFigure": true,
+    "altFromFilename": true,
+    "className": ""
+  }
+}
