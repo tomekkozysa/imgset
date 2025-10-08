@@ -136,12 +136,13 @@ function pLimit(max) {
   };
 }
 
-function outputPathsFor(config, inputDir, outputDir, fileAbs, size, fmt /*, meta */) {
+function outputPathsFor(config, inputDir, outputDir, fileAbs, size, fmt, originalWidth /*, meta */) {
   const relFromInput = path.relative(inputDir, fileAbs);   // e.g. "photos/cats/kitty.jpg"
   const dirPart = config.preserveFolders ? path.dirname(relFromInput) : "";
   const base = path.basename(relFromInput, path.extname(relFromInput));
   const outDir = path.join(outputDir, dirPart);
-  const outName = `${base}-${size}.${fmt}`;
+  const isOriginalSize = Number.isFinite(originalWidth) && Math.round(size) === Math.round(originalWidth);
+  const outName = isOriginalSize ? `${base}.${fmt}` : `${base}-${size}.${fmt}`;
   const full = path.join(outDir, outName);
   // We'll compute final html-relative paths in cmdHtml (relative to the actual html file dir),
   // so store only absolute file path in manifest here.
@@ -151,18 +152,57 @@ function outputPathsFor(config, inputDir, outputDir, fileAbs, size, fmt /*, meta
 async function resizeOne(config, fileAbs, meta, inputDir, outputDir) {
   // { format, width, fileFull, status }
   const created = [];
-  const widths = config.sizes
+  const rawSizes = Array.isArray(config.sizes) ? config.sizes : [];
+  let includeOriginal = rawSizes.length === 0;
+  const numericSizes = [];
+
+  for (const sizeEntry of rawSizes) {
+    if (sizeEntry === null || sizeEntry === undefined) {
+      includeOriginal = true;
+      continue;
+    }
+    if (typeof sizeEntry === "string") {
+      const trimmed = sizeEntry.trim();
+      if (!trimmed) {
+        includeOriginal = true;
+        continue;
+      }
+      const parsed = Number(trimmed);
+      if (Number.isFinite(parsed)) numericSizes.push(parsed);
+      continue;
+    }
+    if (Number.isFinite(sizeEntry)) {
+      numericSizes.push(sizeEntry);
+      continue;
+    }
+  }
+
+  const sourceWidth = meta.width;
+  const validWidths = numericSizes
+    .filter((w) => w > 0)
+    .sort((a, b) => a - b)
+    .filter((w) => !Number.isFinite(sourceWidth) || w <= sourceWidth); // no upscaling
+
+  if (!validWidths.length) includeOriginal = true;
+
+  const candidateWidths = includeOriginal && Number.isFinite(sourceWidth) && sourceWidth > 0
+    ? [...validWidths, sourceWidth]
+    : validWidths;
+
+  const seen = new Set();
+  const effectiveWidths = candidateWidths
     .filter((w) => Number.isFinite(w) && w > 0)
     .sort((a, b) => a - b)
-    .filter((w) => w <= (meta.width || w)); // no upscaling
-
-  // If nothing qualifies (tiny source), at least export the original width once
-  const effectiveWidths = widths.length ? widths : [meta.width];
+    .filter((w) => {
+      if (seen.has(w)) return false;
+      seen.add(w);
+      return true;
+    });
 
   for (const f of config.formats) {
     const fmt = f.format;
     for (const w of effectiveWidths) {
-      const { full, outDir } = outputPathsFor(config, inputDir, outputDir, fileAbs, w, fmt);
+      const { full, outDir } = outputPathsFor(config, inputDir, outputDir, fileAbs, w, fmt, sourceWidth);
       await ensureDir(outDir);
 
       const relIn = toHtmlPath(path.relative(inputDir, fileAbs));

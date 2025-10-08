@@ -83,6 +83,7 @@ If config.json lives in /project/tools/, then "./input" means /project/tools/inp
         3840
   ],
 ```
+Leave the array empty (e.g. `"sizes": []`) to keep each image at its original width. You can also include an empty entry like `""` alongside other numbers to generate both the original size and the specified resized versions. When the original width is preserved, the tool keeps the original filename (only the extension changes to match the output format).
 ### Configure preview html file
 
 ```bash
