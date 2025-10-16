@@ -114,20 +114,3 @@ If you installed globally with npm i -g:
 ```bash
 npm uninstall -g imgset
 ```
-
-
-### Troubleshooting
-
-- command not found: imgset
-
-Ensure your global npm bin is on PATH (for nvm):
-```bash
-echo 'export PATH="$(npm config get prefix)/bin:$PATH"' >> ~/.zshrc && source ~/.zshrc
-```
-- env: node\r: No such file or directory (CRLF line endings)
-Convert to LF: 
-```bash 
-sed -i '' -e 's/\r$//' index.mjs
-```
-- Slow encodes
-Lower AVIF effort (e.g., 3–4) or reduce "concurrency".
