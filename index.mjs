@@ -136,13 +136,16 @@ function pLimit(max) {
   };
 }
 
-function outputPathsFor(config, inputDir, outputDir, fileAbs, size, fmt, originalWidth /*, meta */) {
+function outputPathsFor(config, inputDir, outputDir, fileAbs, size, fmt, originalWidth, formatOptions = {} /*, meta */) {
   const relFromInput = path.relative(inputDir, fileAbs);   // e.g. "photos/cats/kitty.jpg"
   const dirPart = config.preserveFolders ? path.dirname(relFromInput) : "";
   const base = path.basename(relFromInput, path.extname(relFromInput));
   const outDir = path.join(outputDir, dirPart);
+  const append = typeof formatOptions.append_filename === "string" ? formatOptions.append_filename : "";
+  const baseWithAppend = append ? `${base}${append}` : base;
   const isOriginalSize = Number.isFinite(originalWidth) && Math.round(size) === Math.round(originalWidth);
-  const outName = isOriginalSize ? `${base}.${fmt}` : `${base}-${size}.${fmt}`;
+  const sizeSuffix = isOriginalSize ? "" : `-${size}`;
+  const outName = `${baseWithAppend}${sizeSuffix}.${fmt}`;
   const full = path.join(outDir, outName);
   // We'll compute final html-relative paths in cmdHtml (relative to the actual html file dir),
   // so store only absolute file path in manifest here.
@@ -202,7 +205,7 @@ async function resizeOne(config, fileAbs, meta, inputDir, outputDir) {
   for (const f of config.formats) {
     const fmt = f.format;
     for (const w of effectiveWidths) {
-      const { full, outDir } = outputPathsFor(config, inputDir, outputDir, fileAbs, w, fmt, sourceWidth);
+      const { full, outDir } = outputPathsFor(config, inputDir, outputDir, fileAbs, w, fmt, sourceWidth, f);
       await ensureDir(outDir);
 
       const relIn = toHtmlPath(path.relative(inputDir, fileAbs));
