@@ -52,17 +52,20 @@ If config.json lives in /project/tools/, then "./input" means /project/tools/inp
       "format": "avif",
       "quality": 32,
       "effort": 4,
-      "append_filename": "_avif32"
+      "append_filename": "_avif32",
+      "subfolder": "avif32"
     },
     {
       "format": "webp",
-      "quality": 80
+      "quality": 80,
+      "subfolder": "webp"
     },
     {
       "format": "jpeg",
       "quality": 75,
       "progressive": true,
-      "mozjpeg": true
+      "mozjpeg": true,
+      "subfolder": "webp"
     }
   ],
 ```
@@ -70,7 +73,8 @@ If config.json lives in /project/tools/, then "./input" means /project/tools/inp
 - AVIF: quality ~30–40 is typical; effort 4–6 balances speed/size.
 - WebP: quality ~70–82.
 - JPEG: quality ~72–85; progressive: true.
-- use `append_filename` to generate multiple compression configurations per format
+- `append_filename` (optional): append a string (e.g. `_avif32`) to the base filename to export multiple compression configurations per format.
+- `subfolder` (optional): save the outputs inside a dedicated subfolder
 
 
 ### Configure output sizes

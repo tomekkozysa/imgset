@@ -140,7 +140,8 @@ function outputPathsFor(config, inputDir, outputDir, fileAbs, size, fmt, origina
   const relFromInput = path.relative(inputDir, fileAbs);   // e.g. "photos/cats/kitty.jpg"
   const dirPart = config.preserveFolders ? path.dirname(relFromInput) : "";
   const base = path.basename(relFromInput, path.extname(relFromInput));
-  const outDir = path.join(outputDir, dirPart);
+  const subfolder = typeof formatOptions.subfolder === "string" ? formatOptions.subfolder.trim() : "";
+  const outDir = path.join(outputDir, dirPart, subfolder);
   const append = typeof formatOptions.append_filename === "string" ? formatOptions.append_filename : "";
   const baseWithAppend = append ? `${base}${append}` : base;
   const isOriginalSize = Number.isFinite(originalWidth) && Math.round(size) === Math.round(originalWidth);

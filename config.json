@@ -13,7 +13,8 @@
       "format": "avif",
       "quality": 32,
       "effort": 4,
-      "append_filename": "_avif32"
+      "append_filename": "_avif32",
+      "subfolder": "avif32"
     },
     {
       "format": "webp",
