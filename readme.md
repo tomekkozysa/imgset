@@ -1,10 +1,10 @@
 # imgset 
-Basic Node app for bulk image resize and optimisaton for the web.
+Basic Node app for bulk image resize and optimisation for the web.
 
 ### Requirements
 - Works with Node 18+ (tested on Node 20).
 - Uses sharp under the hood.
-
+- Supports jpg, jpeg, png, gif, webp, avif, svg(input only)
 
 ### Install (local dev via symlink)
 ```bash
