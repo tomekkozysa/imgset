@@ -104,6 +104,25 @@ Leave the array empty (e.g. `"sizes": []`) to keep each image at its original wi
   }
 ```
 
+### Manifest output
+- A `resized-manifest.json` file is written alongside your resized assets by default. HTML generation relies on it but you can disable it via `"manifest": false` if you only need the images.
+- Each output now records both `width` and `height` for every generated size/format combination.
+
+Example excerpt:
+```json
+{
+  "manifest": true,
+  "items": [
+    {
+      "original": { "base": "hero.jpg", "width": 4032, "height": 3024 },
+      "outputs": [
+        { "format": "webp", "width": 1280, "height": 960, "status": "written" }
+      ]
+    }
+  ]
+}
+```
+
 ### Preserve subfolders
 ```bash
 preserveFolders:true

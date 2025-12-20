@@ -40,6 +40,8 @@ const DEFAULT_CONFIG = {
   preserveFolders: true,
   // Concurrency (parallel sharp jobs)
   concurrency: Math.max(2, Math.min(os.cpus().length, 8)),
+  // Write resized-manifest.json (set false to skip)
+  manifest: true,
   // HTML output settings
   html: {
     file: "index.html",
@@ -53,6 +55,14 @@ const DEFAULT_CONFIG = {
 
 // Make sure slashes in HTML paths are forward slashes
 const toHtmlPath = (p) => p.split(path.sep).join("/");
+
+function resolveManifestFlag(userConfig, defaultValue) {
+  const candidate = userConfig?.manifest ?? userConfig?.mainfest ?? defaultValue;
+  if (userConfig && userConfig.mainfest !== undefined && userConfig.manifest === undefined) {
+    log('Config option "mainfest" is deprecated. Use "manifest" instead.');
+  }
+  return candidate !== false;
+}
 
 async function ensureDir(dir) {
   await fs.mkdir(dir, { recursive: true });
@@ -115,6 +125,25 @@ async function listFilesRecursive(root, exts) {
   }
   await walk(root);
   return out;
+}
+
+function formatDuration(ms) {
+  if (!Number.isFinite(ms)) return `${ms}ms`;
+  const sign = ms < 0 ? "-" : "";
+  let remaining = Math.abs(ms);
+  const hours = Math.floor(remaining / 3600000);
+  remaining -= hours * 3600000;
+  const minutes = Math.floor(remaining / 60000);
+  remaining -= minutes * 60000;
+  const seconds = Math.floor(remaining / 1000);
+  remaining -= seconds * 1000;
+  const parts = [];
+  if (hours) parts.push(`${hours}h`);
+  if (minutes) parts.push(`${minutes}m`);
+  if (seconds) parts.push(`${seconds}s`);
+  if (!parts.length) parts.push(`${remaining}ms`);
+  else if (parts.length < 2 && remaining) parts.push(`${remaining}ms`);
+  return `${sign}${parts.join(" ")}`;
 }
 
 // Simple concurrency limiter
@@ -214,7 +243,19 @@ async function resizeOne(config, fileAbs, meta, inputDir, outputDir) {
 
       // Skip if already exists (idempotent)
       if (await fileExists(full)) {
-        created.push({ format: fmt, width: w, fileFull: full, status: "skipped" });
+        let existingMeta = null;
+        try {
+          existingMeta = await sharp(full).metadata();
+        } catch {
+          // ignore metadata errors for already-present files
+        }
+        created.push({
+          format: fmt,
+          width: existingMeta?.width ?? w,
+          height: existingMeta?.height ?? null,
+          fileFull: full,
+          status: "skipped"
+        });
         log(`skip  ${fmt} ${w}w | ${relIn} → ${relOut}`);
         continue;
       }
@@ -232,8 +273,14 @@ async function resizeOne(config, fileAbs, meta, inputDir, outputDir) {
       else if (fmt === "png") pipeline.png({ compressionLevel: f.compressionLevel ?? 9 });
       else pipeline.toFormat(fmt); // fallback
 
-      await pipeline.toFile(full);
-      created.push({ format: fmt, width: w, fileFull: full, status: "written" });
+      const info = await pipeline.toFile(full);
+      created.push({
+        format: fmt,
+        width: info?.width ?? w,
+        height: info?.height ?? null,
+        fileFull: full,
+        status: "written"
+      });
       log(`write ${fmt} ${w}w | ${relIn} → ${relOut}`);
     }
   }
@@ -278,9 +325,10 @@ function htmlForImage(config, entry) {
   // Guess width/height from largest fallback for aspect-ratio hints
   const largest = fallbackSet[fallbackSet.length - 1];
   const ratioW = largest?.width || entry.original.width || 800;
-  const ratioH = entry.original.height && entry.original.width
-    ? Math.round(ratioW * (entry.original.height / entry.original.width))
-    : Math.round(ratioW * 0.66);
+  const ratioH = largest?.height
+    || (entry.original.height && entry.original.width
+      ? Math.round(ratioW * (entry.original.height / entry.original.width))
+      : Math.round(ratioW * 0.66));
 
   const classAttr = config.html.className ? ` class="${config.html.className}"` : "";
 
@@ -356,20 +404,42 @@ async function cmdBuild(config) {
     )
   );
 
+  const manifestEnabled = config.manifest !== false;
   const manifest = { generatedAt: new Date().toISOString(), config, items };
   const manifestPath = path.join(outputDir, "resized-manifest.json");
-  await writeJson(manifestPath, manifest);
+  if (manifestEnabled) {
+    await writeJson(manifestPath, manifest);
+  }
 
   const dt = Date.now() - t0;
-  log(`Done. ${writtenCount} written, ${skippedCount} skipped across ${files.length} originals in ${dt}ms.`);
-  log(`Manifest: ${manifestPath}`);
-  return { manifest, stats: { written: writtenCount, skipped: skippedCount, files: files.length, timeMs: dt } };
+  log(`Done. ${writtenCount} written, ${skippedCount} skipped across ${files.length} originals in ${formatDuration(dt)} (${dt}ms).`);
+  if (manifestEnabled) {
+    log(`Manifest: ${manifestPath}`);
+  } else {
+    log("Manifest writing skipped (config.manifest === false).");
+  }
+  return { manifest: manifestEnabled ? manifest : null, stats: { written: writtenCount, skipped: skippedCount, files: files.length, timeMs: dt } };
 }
 
 async function cmdHtml(config, manifestInput = null) {
+  if (!config.html || typeof config.html !== "object") {
+    err("HTML generation is disabled in config (html: false).");
+    return;
+  }
+  if (config.manifest === false) {
+    err("Cannot generate HTML because config.manifest is false. Enable manifest generation or run without the html command.");
+    return;
+  }
   const outputDir = path.resolve(configDir, config.outputDir);
   const manifestPath = path.join(outputDir, "resized-manifest.json");
-  const manifest = manifestInput || (await readJson(manifestPath));
+  let manifest = manifestInput;
+  if (!manifest) {
+    if (!(await fileExists(manifestPath))) {
+      err(`Manifest not found at ${manifestPath}. Run "imgset build" first or enable manifest generation.`);
+      return;
+    }
+    manifest = await readJson(manifestPath);
+  }
 
   // Make image paths relative to the ACTUAL HTML file directory (supports subfolders)
   const htmlAbs = path.resolve(outputDir, config.html.file);
@@ -420,10 +490,15 @@ async function run() {
 
   // Load config (or create defaults silently if missing)
   let config = DEFAULT_CONFIG;
+  let userConfig = null;
   if (await fileExists(configAbsPath)) {
-    config = { ...DEFAULT_CONFIG, ...(await readJson(configAbsPath)) };
+    userConfig = await readJson(configAbsPath);
+    config = { ...DEFAULT_CONFIG, ...userConfig };
+    config.manifest = resolveManifestFlag(userConfig, DEFAULT_CONFIG.manifest);
     // deep-merge html if present
-    if (config.html) config.html = { ...DEFAULT_CONFIG.html, ...config.html };
+    if (config.html && typeof config.html === "object") {
+      config.html = { ...DEFAULT_CONFIG.html, ...config.html };
+    }
   } else {
     log(`No config at ${configPath}, using defaults. You can run "node index.mjs init -c ${configPath}" to create one.`);
   }
@@ -434,7 +509,13 @@ async function run() {
     await cmdHtml(config);
   } else if (cmd === "all" || cmd === undefined) {
     const { manifest } = await cmdBuild(config);
-    await cmdHtml(config, manifest);
+    if (config.html === false) {
+      log("HTML generation skipped (config.html === false).");
+    } else if (config.manifest === false) {
+      log("HTML generation skipped because manifest output is disabled (config.manifest === false).");
+    } else {
+      await cmdHtml(config, manifest);
+    }
   } else {
     err(`Unknown command: ${cmd}
 Usage:
