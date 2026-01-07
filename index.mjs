@@ -173,9 +173,7 @@ function outputPathsFor(config, inputDir, outputDir, fileAbs, size, fmt, origina
   const outDir = path.join(outputDir, dirPart, subfolder);
   const append = typeof formatOptions.append_filename === "string" ? formatOptions.append_filename : "";
   const baseWithAppend = append ? `${base}${append}` : base;
-  const isOriginalSize = Number.isFinite(originalWidth) && Math.round(size) === Math.round(originalWidth);
-  const sizeSuffix = isOriginalSize ? "" : `-${size}`;
-  const outName = `${baseWithAppend}${sizeSuffix}.${fmt}`;
+  const outName = `${baseWithAppend}-${size}.${fmt}`;
   const full = path.join(outDir, outName);
   // We'll compute final html-relative paths in cmdHtml (relative to the actual html file dir),
   // so store only absolute file path in manifest here.
@@ -188,6 +186,7 @@ async function resizeOne(config, fileAbs, meta, inputDir, outputDir) {
   const rawSizes = Array.isArray(config.sizes) ? config.sizes : [];
   let includeOriginal = rawSizes.length === 0;
   const numericSizes = [];
+  const relIn = toHtmlPath(path.relative(inputDir, fileAbs));
 
   for (const sizeEntry of rawSizes) {
     if (sizeEntry === null || sizeEntry === undefined) {
@@ -211,10 +210,22 @@ async function resizeOne(config, fileAbs, meta, inputDir, outputDir) {
   }
 
   const sourceWidth = meta.width;
+  const tooLarge = [];
   const validWidths = numericSizes
     .filter((w) => w > 0)
     .sort((a, b) => a - b)
-    .filter((w) => !Number.isFinite(sourceWidth) || w <= sourceWidth); // no upscaling
+    .filter((w) => {
+      if (Number.isFinite(sourceWidth) && w > sourceWidth) {
+        tooLarge.push(w);
+        return false; // no upscaling
+      }
+      return true;
+    });
+
+  if (tooLarge.length) {
+    const srcWidthLabel = Number.isFinite(sourceWidth) ? sourceWidth : "unknown";
+    log(`skip sizes [${tooLarge.join(", ")}] for ${relIn} (source width ${srcWidthLabel})`);
+  }
 
   if (!validWidths.length) includeOriginal = true;
 
@@ -238,7 +249,6 @@ async function resizeOne(config, fileAbs, meta, inputDir, outputDir) {
       const { full, outDir } = outputPathsFor(config, inputDir, outputDir, fileAbs, w, fmt, sourceWidth, f);
       await ensureDir(outDir);
 
-      const relIn = toHtmlPath(path.relative(inputDir, fileAbs));
       const relOut = toHtmlPath(path.relative(outputDir, full));
 
       // Skip if already exists (idempotent)
